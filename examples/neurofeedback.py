@@ -17,15 +17,21 @@ import numpy as np  # Module that simplifies computations on matrices
 import matplotlib.pyplot as plt  # Module used for plotting
 from pylsl import StreamInlet, resolve_byprop  # Module to receive EEG data
 import utils  # Our own utility functions
+from pythonosc import dispatcher
+from pythonosc import udp_client
+
+SIPADDR = '127.0.0.1'
+CIPADDR = '127.0.0.1'
+CPORT = 5001
 
 # Handy little enum to make code more readable
-
 
 class Band:
     Delta = 0
     Theta = 1
     Alpha = 2
     Beta = 3
+    Gamma = 4
 
 
 """ EXPERIMENTAL PARAMETERS """
@@ -47,6 +53,9 @@ SHIFT_LENGTH = EPOCH_LENGTH - OVERLAP_LENGTH
 # Index of the channel(s) (electrodes) to be used
 # 0 = left ear, 1 = left forehead, 2 = right forehead, 3 = right ear
 INDEX_CHANNEL = [0]
+
+
+client = udp_client.SimpleUDPClient(CIPADDR, CPORT)
 
 if __name__ == "__main__":
 
@@ -85,7 +94,7 @@ if __name__ == "__main__":
 
     # Initialize the band power buffer (for plotting)
     # bands will be ordered: [delta, theta, alpha, beta]
-    band_buffer = np.zeros((n_win_test, 4))
+    band_buffer = np.zeros((n_win_test, 5))
 
     """ 3. GET DATA """
 
@@ -110,6 +119,7 @@ if __name__ == "__main__":
                 eeg_buffer, ch_data, notch=True,
                 filter_state=filter_state)
 
+
             """ 3.2 COMPUTE BAND POWERS """
             # Get newest samples from the buffer
             data_epoch = utils.get_last_data(eeg_buffer,
@@ -119,6 +129,7 @@ if __name__ == "__main__":
             band_powers = utils.compute_band_powers(data_epoch, fs)
             band_buffer, _ = utils.update_buffer(band_buffer,
                                                  np.asarray([band_powers]))
+
             # Compute the average band powers for all epochs in buffer
             # This helps to smooth out noise
             smooth_band_powers = np.mean(band_buffer, axis=0)
@@ -131,9 +142,13 @@ if __name__ == "__main__":
 
             # Alpha Protocol:
             # Simple redout of alpha power, divided by delta waves in order to rule out noise
-            alpha_metric = smooth_band_powers[Band.Alpha] / \
-                smooth_band_powers[Band.Delta]
-            print('Alpha Relaxation: ', alpha_metric)
+            print('Sending OSC.')
+            delta_abs = smooth_band_powers[Band.Delta]
+            theta_abs = smooth_band_powers[Band.Theta]
+            alpha_abs = smooth_band_powers[Band.Alpha]
+            beta_abs = smooth_band_powers[Band.Beta]
+            gamma_abs = smooth_band_powers[Band.Gamma]
+            client.send_message("/muse/elements/", [delta_abs, theta_abs, alpha_abs, beta_abs, gamma_abs])
 
             # Beta Protocol:
             # Beta waves have been used as a measure of mental activity and concentration
